@@ -3,5 +3,6 @@
 !.gitignore
 !Makefile
 !Readme.md
+!License.md
 !**/
 !**/*.c
