@@ -6,6 +6,13 @@
 #include <stdbool.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
+
+#ifndef NDEBUG
+#define debug_printf(...) fprintf(stderr, __VA_ARGS__)
+#else
+#define debug_printf(...)
+#endif
 
 char* (*__orig_getenv)(const char*);
 
@@ -28,23 +35,31 @@ __attribute__((constructor)) void init() {
 }
 
 static bool get_pref_host(const char* const pref_host_name) {
-	struct addrinfo* pref_addr_info;
+	struct addrinfo* pref_addr_info = NULL;
 	const int gai_status = getaddrinfo(pref_host_name, NULL, NULL, &pref_addr_info);
 	if(0 == gai_status){
 		memset(pref_host_addrstr, 0, sizeof(pref_host_addrstr));
-		if(NULL != inet_ntop(pref_addr_info->ai_family, pref_addr_info->ai_addr, pref_host_addrstr, INET6_ADDRSTRLEN)){
-			return true;
+		void* addr = NULL;
+		if(pref_addr_info->ai_family == AF_INET) {
+			addr = &((struct sockaddr_in*)pref_addr_info->ai_addr)->sin_addr;
+		} else if(pref_addr_info->ai_family == AF_INET6) {
+			addr = &((struct sockaddr_in6*)pref_addr_info->ai_addr)->sin6_addr;
+		}
+		if(NULL != inet_ntop(pref_addr_info->ai_family, addr, pref_host_addrstr, INET6_ADDRSTRLEN)){
+			debug_printf("pref_host_addrstr=\"%s\"\n", pref_host_addrstr);
 		} else {
 			perror("error converting sockaddr to string");
 		}
 	} else {
 		fprintf(stderr, "Error resolving %s: %s", pref_host_name, gai_strerror(gai_status));
 	}
-	return false;
+	freeaddrinfo(pref_addr_info);
+	return (0 == gai_status);
 }
 
 char* getenv(const char* name) {
 	if(PREF_MPD_HOST != NULL) {
+		debug_printf("PREF_MPD_HOST=\"%s\"\n", PREF_MPD_HOST);
 		const bool want_host = (0 == strcmp(name, ENV_MPD_HOST));
 		const bool want_port = (0 == strcmp(name, ENV_MPD_PORT));
 		bool have_host = false;
